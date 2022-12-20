@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.material.Button
 import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
@@ -38,16 +40,86 @@ class MainActivity : AppCompatActivity() {
                     "https://i.pinimg.com/564x/82/3d/c4/823dc43360361f8c36aaa083c17f3ea2.jpg" to "coke",
                     "https://i.pinimg.com/564x/25/27/31/25273185114afd744cb1e5ec34fe92fa.jpg" to "subway",
                 )
-                var i by remember {
+                var gameIndex by remember {
                     mutableStateOf(0)
                 }
-                val (url, answer) = answers[i]
-                Game(
-                    url = url,
-                    letters = answer.asSequence().shuffled().joinToString(separator = ""),
-                ) { word ->
-                    if (word == answer) {
-                        i = (i + 1).rem(answers.size)
+                var screen by remember {
+                    val (url, answer) = answers[gameIndex]
+                    mutableStateOf<Screen>(
+                        Screen.Game(
+                            url = url,
+                            letters = answer
+                                .asSequence()
+                                .shuffled()
+                                .joinToString(separator = ""),
+                        )
+                    )
+                }
+                (screen as? Screen.Game)?.let { (url, letters) ->
+                    Game(
+                        url = url,
+                        letters = letters,
+                    ) { word ->
+                        val (_, answer) = answers[gameIndex]
+                        gameIndex = (gameIndex + 1).rem(answers.size)
+                        val nextGame = Screen.Game(
+                            url = answers[gameIndex].first,
+                            letters = answers[gameIndex].second
+                                .asSequence()
+                                .shuffled()
+                                .joinToString(separator = "")
+                        )
+                        screen = if (word == answer) {
+                            Screen.Correct(nextGame)
+                        } else {
+                            Screen.Failure(nextGame, answer)
+                        }
+                    }
+                }
+                (screen as? Screen.Correct)?.let { (next) ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .size(200.dp)
+                                .align(Alignment.Center)
+                        ) {
+                            Text(text = "Correct!")
+                            Button(onClick = { screen = next }) {
+                                Text(text = "Next")
+                            }
+                        }
+                    }
+                }
+                (screen as? Screen.Failure)?.let { (next, answer) ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .size(200.dp)
+                                .align(Alignment.Center)
+                        ) {
+                            Text(text = "Wrong :(")
+                            Button(onClick = { screen = next }) {
+                                Text(text = "Next")
+                            }
+                            var showAnswer by remember {
+                                mutableStateOf(false)
+                            }
+                            if (showAnswer) {
+                                Text(text = answer)
+                            } else {
+                                Button(onClick = { showAnswer = true }) {
+                                    Text(text = "Show Answer")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -72,13 +144,28 @@ class MainActivity : AppCompatActivity() {
                     .weight(1f)
                     .padding(vertical = 16.dp)
             )
+            var enteredWord by remember {
+                mutableStateOf("")
+            }
             PredefinedLettersMode(
                 letters = letters,
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
-                    .padding(top = 16.dp, bottom = 64.dp),
-                onWordEntered = onWordEntered,
+                    .padding(vertical = 16.dp),
+                onWordEntered = { enteredWord = it },
             )
+            Button(
+                enabled = enteredWord
+                    .filter { it != ' ' }
+                    .length == letters.length,
+                onClick = { onWordEntered(enteredWord) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 64.dp)
+                    .padding(bottom = 64.dp)
+            ) {
+                Text(text = "Guess")
+            }
         }
     }
 
@@ -109,6 +196,7 @@ class MainActivity : AppCompatActivity() {
                         val selected = topLetters[position]
                         topLetters = topLetters.replaceRange(position..position, " ")
                         bottomLetters = bottomLetters.replaceFirst(' ', selected)
+                        onWordEntered(topLetters)
                     }
                 )
                 Letters(
@@ -117,9 +205,7 @@ class MainActivity : AppCompatActivity() {
                         val selected = bottomLetters[position]
                         bottomLetters = bottomLetters.replaceRange(position..position, " ")
                         topLetters = topLetters.replaceFirst(' ', selected)
-                        if (topLetters.none { it == ' ' }) {
-                            onWordEntered(topLetters)
-                        }
+                        onWordEntered(topLetters)
                     }
                 )
             }
